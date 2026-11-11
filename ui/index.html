@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Text-to-SQL Studio · Gemini API</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
+            <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"></path>
+            <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"></path>
+          </svg>
+        </div>
+        <div>
+          <h1>Text-to-SQL Studio</h1>
+          <p class="subtitle">Agentic Query Generator · Schema Injection + Validation Loop</p>
+        </div>
+      </div>
+
+      <div class="topbar-meta">
+        <span class="pill pill-db" id="db-pill">SQLite · loading…</span>
+        <span class="pill pill-model" id="model-pill">gemini-3.5-flash-lite</span>
+        <button class="icon-btn" id="theme-toggle" type="button" title="Toggle Light/Dark Theme" aria-label="Toggle theme">
+          <span id="theme-icon">☀️</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main 2-Column Layout -->
+    <div class="workspace">
+      <!-- Left Sidebar: Schema & ER Diagram -->
+      <aside class="sidebar">
+        <div class="panel schema-panel">
+          <div class="panel-header">
+            <h2>Database Schema</h2>
+            <div class="segmented" role="tablist" aria-label="Schema view mode">
+              <button class="seg-btn active" data-schema-tab="tables" role="tab" aria-selected="true">Tables</button>
+              <button class="seg-btn" data-schema-tab="er" role="tab" aria-selected="false">ER Map</button>
+            </div>
+          </div>
+
+          <div id="schema-tables-view" class="schema-content">
+            <div class="search-wrap">
+              <input type="search" id="schema-filter" placeholder="Filter tables or columns…" autocomplete="off" />
+            </div>
+            <div id="tables-list" class="tables-list">
+              <div class="empty-muted">Loading schema…</div>
+            </div>
+          </div>
+
+          <div id="schema-er-view" class="schema-content hidden">
+            <div class="er-hint">Click a table node to inspect relationships or preview rows.</div>
+            <div id="er-canvas" class="er-canvas"></div>
+          </div>
+        </div>
+
+        <!-- History Panel -->
+        <div class="panel history-panel">
+          <div class="panel-header">
+            <h2>Recent Queries</h2>
+            <button class="text-btn" id="clear-history" type="button">Clear</button>
+          </div>
+          <div id="history-list" class="history-list">
+            <div class="empty-muted">Run a question to build history.</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right Main Content -->
+      <main class="main-col">
+        <!-- Question Composer -->
+        <section class="panel composer-panel">
+          <form id="query-form" class="composer-form">
+            <div class="input-row">
+              <textarea
+                id="question-input"
+                rows="2"
+                placeholder="Ask a question in plain English… e.g. Show me the top 5 highest-grossing products"
+                required
+              ></textarea>
+              <button id="run-btn" class="primary-btn" type="submit">
+                <span class="btn-label">Run Query</span>
+                <span class="btn-spinner hidden" aria-hidden="true"></span>
+              </button>
+            </div>
+
+            <div class="composer-footer">
+              <div class="sample-chips" aria-label="Sample questions">
+                <button type="button" class="chip" data-q="Show me the top 5 highest-grossing products">Top 5 products</button>
+                <button type="button" class="chip" data-q="Which customers placed more than 2 orders?">Customers &gt; 2 orders</button>
+                <button type="button" class="chip" data-q="What is the total revenue per product category?">Revenue by category</button>
+                <button type="button" class="chip" data-q="List all orders placed in March 2024 with customer names">March 2024 orders</button>
+                <button type="button" class="chip" data-q="What is the total spending by customer city?">Spending by city</button>
+              </div>
+
+              <label class="toggle-wrap" title="Injects a simulated DB error on Attempt 1 so you can watch Gemini self-correct in Step 5">
+                <input type="checkbox" id="simulate-error-toggle" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-text">Demo Self-Correction</span>
+              </label>
+            </div>
+          </form>
+        </section>
+
+        <!-- Agentic Pipeline Stepper + Inspector -->
+        <section class="panel pipeline-panel">
+          <div class="panel-header">
+            <div class="header-title-group">
+              <h2>Agentic Pipeline</h2>
+              <span class="status-badge status-idle" id="pipeline-status">Ready</span>
+            </div>
+            <span class="meta-text" id="pipeline-timing">Click any stage to inspect</span>
+          </div>
+
+          <div class="pipeline-track" id="pipeline-track">
+            <button type="button" class="stage-node" data-stage="schema" data-state="idle">
+              <span class="stage-num">1</span>
+              <span class="stage-info">
+                <strong>Schema</strong>
+                <small>src/schema.py</small>
+              </span>
+              <span class="stage-dot"></span>
+            </button>
+            <div class="stage-connector"></div>
+
+            <button type="button" class="stage-node" data-stage="prompt" data-state="idle">
+              <span class="stage-num">2</span>
+              <span class="stage-info">
+                <strong>Prompt</strong>
+                <small>src/prompt.py</small>
+              </span>
+              <span class="stage-dot"></span>
+            </button>
+            <div class="stage-connector"></div>
+
+            <button type="button" class="stage-node" data-stage="llm" data-state="idle">
+              <span class="stage-num">3</span>
+              <span class="stage-info">
+                <strong>Gemini API</strong>
+                <small>src/llm.py</small>
+              </span>
+              <span class="stage-dot"></span>
+            </button>
+            <div class="stage-connector"></div>
+
+            <button type="button" class="stage-node" data-stage="execute" data-state="idle">
+              <span class="stage-num">4</span>
+              <span class="stage-info">
+                <strong>Execute SQL</strong>
+                <small>src/agent.py</small>
+              </span>
+              <span class="stage-dot"></span>
+            </button>
+            <div class="stage-connector"></div>
+
+            <button type="button" class="stage-node" data-stage="retry" data-state="idle">
+              <span class="stage-num">5</span>
+              <span class="stage-info">
+                <strong>Self-Correct</strong>
+                <small>Validation loop</small>
+              </span>
+              <span class="stage-dot"></span>
+            </button>
+          </div>
+
+          <!-- Expandable Stage Inspector -->
+          <div id="stage-inspector" class="stage-inspector hidden">
+            <div class="inspector-head">
+              <span id="inspector-title">Stage Details</span>
+              <button type="button" class="text-btn" id="close-inspector">Hide</button>
+            </div>
+            <div id="inspector-body" class="inspector-body"></div>
+          </div>
+        </section>
+
+        <!-- Error Banner (if query fails) -->
+        <div id="error-banner" class="error-banner hidden" role="alert"></div>
+
+        <!-- Output Grid: SQL + Results -->
+        <section class="panel sql-panel" id="sql-panel">
+          <div class="panel-header">
+            <div class="header-title-group">
+              <h2>Generated SQL</h2>
+              <div id="sql-badges" class="sql-badges"></div>
+            </div>
+            <button type="button" class="ghost-btn" id="copy-sql-btn" disabled>Copy SQL</button>
+          </div>
+          <pre class="sql-code" id="sql-output"><span class="empty-muted">Your generated SQL will appear here…</span></pre>
+        </section>
+
+        <section class="panel results-panel" id="results-panel">
+          <div class="panel-header">
+            <div class="header-title-group">
+              <h2>Query Results</h2>
+              <span class="meta-text" id="row-count-badge">0 rows</span>
+            </div>
+            <div class="results-controls">
+              <div class="segmented" role="tablist" aria-label="Result view">
+                <button class="seg-btn active" data-result-tab="table" role="tab" aria-selected="true">Table</button>
+                <button class="seg-btn" data-result-tab="chart" id="chart-tab-btn" role="tab" aria-selected="false">Chart</button>
+              </div>
+              <button type="button" class="ghost-btn" id="export-csv-btn" disabled>Export CSV</button>
+            </div>
+          </div>
+
+          <div id="results-table-view" class="results-body">
+            <div class="empty-state">
+              <p>Ask a natural language question above to query the e-commerce database.</p>
+            </div>
+          </div>
+
+          <div id="results-chart-view" class="results-body hidden">
+            <div id="chart-toolbar" class="chart-toolbar hidden">
+              <label for="chart-metric-select">Metric:</label>
+              <select id="chart-metric-select"></select>
+            </div>
+            <div id="chart-container" class="chart-container"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Table Preview Modal -->
+  <div id="table-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-title">Table Preview</h3>
+        <button type="button" class="icon-btn" id="close-modal" aria-label="Close preview">✕</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

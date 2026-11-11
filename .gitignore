@@ -1,0 +1,11 @@
+# Secrets & environment
+.env
+
+# Local SQLite database
+db/*.db
+
+# Python caches & virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
